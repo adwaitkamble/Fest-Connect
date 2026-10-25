@@ -1,5 +1,11 @@
 import { apiClient } from './client.js';
-import { PaymentRecord, InitiatePaymentRequest } from '../types/payment.types.js';
+import {
+  PaymentRecord,
+  InitiatePaymentRequest,
+  PaymentConfigResponse,
+  RazorpayOrderResponse,
+  RazorpayVerifyRequest,
+} from '../types/payment.types.js';
 
 export async function initiatePayment(
   registrationId: number,
@@ -17,6 +23,34 @@ export async function initiatePayment(
   });
 }
 
+export async function fetchPaymentConfig(): Promise<PaymentConfigResponse> {
+  return apiClient<PaymentConfigResponse>('/api/v1/payments/config');
+}
+
+export async function createRazorpayOrder(
+  registrationId: number
+): Promise<RazorpayOrderResponse> {
+  return apiClient<RazorpayOrderResponse>(
+    `/api/v1/registrations/${registrationId}/payments/razorpay/order`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ registration_id: registrationId }),
+    }
+  );
+}
+
+export async function verifyRazorpayPayment(
+  payload: RazorpayVerifyRequest
+): Promise<PaymentRecord> {
+  return apiClient<PaymentRecord>(
+    `/api/v1/registrations/${payload.registration_id}/payments/razorpay/verify`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
 export async function fetchRegistrationPayments(
   registrationId: number
 ): Promise<PaymentRecord[]> {
@@ -26,3 +60,4 @@ export async function fetchRegistrationPayments(
 export async function fetchPaymentById(paymentId: number): Promise<PaymentRecord> {
   return apiClient<PaymentRecord>(`/api/v1/payments/${paymentId}`);
 }
+

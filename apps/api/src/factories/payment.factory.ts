@@ -1,6 +1,7 @@
 import { getEnv } from '../config/env.js';
 import { PaymentGatewayAdapter } from '../types/payment.types.js';
 import { MockPaymentGatewayAdapter } from '../adapters/payment/mock-payment-gateway.adapter.js';
+import { RazorpayPaymentGatewayAdapter } from '../adapters/payment/razorpay-payment-gateway.adapter.js';
 import { ValidationError, ForbiddenError } from '../errors/app-error.js';
 
 export class PaymentFactory {
@@ -25,8 +26,20 @@ export class PaymentFactory {
       return new MockPaymentGatewayAdapter();
     }
 
-    // Supported real providers placeholder (Phase 06 strictly uses Mock, refusing real money)
-    if (providerKey === 'razorpay' || providerKey === 'stripe') {
+    if (providerKey === 'razorpay') {
+      const keyId = env.RAZORPAY_KEY_ID?.trim();
+      const keySecret = env.RAZORPAY_KEY_SECRET?.trim();
+
+      if (!keyId || !keySecret) {
+        throw new ValidationError(
+          `Payment provider 'razorpay' is configured but real money gateways are not enabled in this build without RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.`
+        );
+      }
+
+      return new RazorpayPaymentGatewayAdapter(keyId, keySecret);
+    }
+
+    if (providerKey === 'stripe') {
       throw new ValidationError(
         `Payment provider '${providerKey}' is configured but real money gateways are not enabled in this build.`
       );

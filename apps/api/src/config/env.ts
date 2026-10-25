@@ -35,9 +35,11 @@ export const envSchema = z
     REDIS_ENABLED: z.coerce.boolean().default(false),
     CACHE_DEFAULT_TTL_SECONDS: z.coerce.number().default(60),
 
-    // Payment settings (Phase 06)
+    // Payment settings (Phase 06 & Real Razorpay Gateway)
     PAYMENT_PROVIDER: z.string().default('mock'),
     DEFAULT_CURRENCY: z.string().default('INR'),
+    RAZORPAY_KEY_ID: z.string().optional().default(''),
+    RAZORPAY_KEY_SECRET: z.string().optional().default(''),
 
     // Email & Notification settings (Phase 07)
     EMAIL_PROVIDER: z.enum(['console', 'gmail']).default('console'),

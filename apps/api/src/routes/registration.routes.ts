@@ -15,6 +15,8 @@ import {
 import {
   initiatePaymentSchema,
   registrationPaymentParamSchema,
+  razorpayOrderSchema,
+  razorpayVerifySchema,
 } from '../schemas/payment.schema.js';
 
 export const registrationRouter = Router();
@@ -67,6 +69,24 @@ registrationRouter.post(
   validateParams(registrationPaymentParamSchema),
   validateBody(initiatePaymentSchema),
   paymentController.initiate
+);
+
+// Create Razorpay order for a registration (POST /api/v1/registrations/:id/payments/razorpay/order)
+registrationRouter.post(
+  '/:id/payments/razorpay/order',
+  csrfProtection,
+  validateParams(registrationPaymentParamSchema),
+  validateBody(razorpayOrderSchema),
+  paymentController.createRazorpayOrder
+);
+
+// Verify Razorpay payment for a registration (POST /api/v1/registrations/:id/payments/razorpay/verify)
+registrationRouter.post(
+  '/:id/payments/razorpay/verify',
+  csrfProtection,
+  validateParams(registrationPaymentParamSchema),
+  validateBody(razorpayVerifySchema),
+  paymentController.verifyRazorpayPayment
 );
 
 // Get digital pass for a registration (GET /api/v1/registrations/:id/pass)

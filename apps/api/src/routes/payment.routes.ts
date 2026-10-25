@@ -6,12 +6,33 @@ import { validateBody, validateParams } from '../middleware/validate.middleware.
 import {
   initiatePaymentSchema,
   paymentIdParamSchema,
+  razorpayOrderSchema,
+  razorpayVerifySchema,
 } from '../schemas/payment.schema.js';
 
 export const paymentRouter = Router();
 
-// All payment routes require authentication
+// Public/authenticated gateway config (GET /api/v1/payments/config)
+paymentRouter.get('/config', paymentController.getConfig);
+
+// All mutation & record payment routes require authentication
 paymentRouter.use(authenticate, requireAuth);
+
+// Create Razorpay Order (POST /api/v1/payments/razorpay/order)
+paymentRouter.post(
+  '/razorpay/order',
+  csrfProtection,
+  validateBody(razorpayOrderSchema),
+  paymentController.createRazorpayOrder
+);
+
+// Verify Razorpay Payment (POST /api/v1/payments/razorpay/verify)
+paymentRouter.post(
+  '/razorpay/verify',
+  csrfProtection,
+  validateBody(razorpayVerifySchema),
+  paymentController.verifyRazorpayPayment
+);
 
 // Initiate payment attempt (POST /api/v1/payments)
 paymentRouter.post(
@@ -27,3 +48,4 @@ paymentRouter.get(
   validateParams(paymentIdParamSchema),
   paymentController.getById
 );
+

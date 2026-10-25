@@ -206,17 +206,47 @@ This script is designed for your faculty presentation. Follow these exact steps 
 
 ---
 
-### Step 5: Mock Payment State Machine & Outcome Simulation (2 Mins)
-1. Click **Pay Registration Fee** (Amount: `INR 400.00`).
-2. Point out the notice banner: *"Demo Payment Gateway — No Real Money Charged"*.
-   - *Technical Explanation:* *"We implemented the Factory Pattern and Adapter Pattern here. In development, it uses MockPaymentGatewayAdapter. In production, mock operations are strictly refused by server guards."*
+### Step 5: Payment Processing — Razorpay Gateway & Demo Simulator (2 Mins)
+1. Click **Pay Registration Fee** (Amount: `INR 250.00` or event fee).
+2. Point out the two available modes powered by the **Factory & Adapter Patterns**:
+   - **Mode A: Razorpay Gateway (Real Payment Integration):**
+     - Powered by `RazorpayPaymentGatewayAdapter`.
+     - Supports live/sandbox UPI (Google Pay, PhonePe, Paytm, BHIM), Credit/Debit Cards, Netbanking, and QR Codes.
+     - Automatically active as soon as `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` are added to `.env`.
+     - Clicking *"Pay with Razorpay"* launches the official Razorpay Checkout popup, followed by server-side cryptographic HMAC-SHA256 signature verification upon completion.
+   - **Mode B: Demo Simulator (Instant Viva Demonstration):**
+     - Powered by `MockPaymentGatewayAdapter`.
+     - Allows instant simulation of `SUCCESS`, `FAILED` (to demonstrate retry flows), and `PENDING` states without needing real money or OTPs.
 3. **Simulate Failed Payment (Negative Test):**
-   - Select **"Simulate FAILED"** in outcome dropdown. Click **Process Demo Payment**.
-   - Transaction fails. Show that registration remains **`PENDING_PAYMENT`**, and retry button remains available.
-4. **Simulate Successful Payment (Positive Test):**
+   - In Demo Simulator, select **"Simulate FAILED"**. Click **Process Demo Payment**.
+   - Transaction fails. Show that registration remains **`PENDING_PAYMENT`**, and the retry button remains active.
+4. **Complete Successful Payment (Positive Test):**
    - Click **Pay Registration Fee** again.
-   - Select **"Simulate SUCCESS"**. Click **Process Demo Payment**.
-   - Payment succeeds (`MOCK-SUCC-...`) and registration status atomically transitions to green: **`CONFIRMED`**.
+   - Select **"Simulate SUCCESS"** (or pay via Razorpay Sandbox). Click **Process Demo Payment**.
+   - Payment succeeds (`MOCK-SUCC-...` or `pay_...`) and registration status atomically transitions to green: **`CONFIRMED`**.
+
+---
+
+### 5.1 How to Add and Test Real Razorpay API Keys
+1. **Get Free Test Keys:**
+   - Log in to your Razorpay Dashboard at [https://dashboard.razorpay.com/app/keys](https://dashboard.razorpay.com/app/keys).
+   - Ensure the toggle at top-right is in **Test Mode**.
+   - Click **Generate Test Key** and copy:
+     - **Key ID:** (starts with `rzp_test_...`)
+     - **Key Secret:** (alphanumeric string)
+2. **Add to `.env`:**
+   ```ini
+   RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxxx
+   RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+3. **Restart Containers / Dev Server:**
+   - For Docker: `docker compose -p festconnect up -d`
+   - For Bare-Metal: `npm run dev`
+4. **Experience Live Razorpay:**
+   - Open [http://localhost](http://localhost) -> Click **Pay Now** on any pending registration.
+   - The **Razorpay Gateway** tab will now display a green **LIVE** badge!
+   - Click **Pay with Razorpay** to launch the authentic Razorpay checkout popup.
+
 
 ---
 

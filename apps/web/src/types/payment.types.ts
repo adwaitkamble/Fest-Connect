@@ -26,3 +26,28 @@ export interface InitiatePaymentRequest {
   payment_method?: string;
   simulated_outcome?: 'SUCCESS' | 'FAILED' | 'PENDING';
 }
+
+export interface RazorpayOrderResponse {
+  orderId: string;
+  keyId: string;
+  amount: number;
+  currency: string;
+  registrationId: number;
+  teamName: string;
+  eventName: string;
+}
+
+export interface RazorpayVerifyRequest {
+  registration_id: number;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface PaymentConfigResponse {
+  activeProvider: string;
+  razorpayEnabled: boolean;
+  razorpayKeyId: string | null;
+  currency: string;
+}
+

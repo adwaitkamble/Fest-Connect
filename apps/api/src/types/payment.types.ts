@@ -68,3 +68,38 @@ export interface PaymentGatewayAdapter {
   readonly providerName: string;
   processPayment(request: PaymentGatewayRequest): Promise<PaymentGatewayResponse>;
 }
+
+export interface RazorpayOrderRequest {
+  registrationId: number;
+  amount: number;
+  currency: string;
+  teamName: string;
+  eventName: string;
+  participantEmail: string;
+  attemptNumber: number;
+}
+
+export interface RazorpayOrderResponse {
+  orderId: string;
+  keyId: string;
+  amount: number; // In paise (₹250 = 25000)
+  currency: string;
+  registrationId: number;
+  teamName: string;
+  eventName: string;
+}
+
+export interface RazorpayVerifyDto {
+  registration_id: number;
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface PaymentConfigResponse {
+  activeProvider: string;
+  razorpayEnabled: boolean;
+  razorpayKeyId: string | null;
+  currency: string;
+}
+
