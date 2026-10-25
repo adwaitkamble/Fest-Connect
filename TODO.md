@@ -110,6 +110,7 @@
 - [x] Screenshots/demo script (`docs/DEMO_SCRIPT.md`), viva defense (`docs/VIVA_QUESTIONS_AND_ANSWERS.md`), and limitations (`docs/KNOWN_LIMITATIONS.md`) documented.
 - [x] Full FA2 Submission Dossier created in `docs/FA2_SUBMISSION_DOSSIER.md` mapping to all 6 rubric criteria (10/10 marks).
 - [x] Event & Workshop Date Scheduling Enhancement: Added integrated date, time slot, and venue picker into `EventFormModal.tsx` allowing coordinators to configure calendar dates directly upon event/workshop creation.
+- [x] Remote Repository Push: Codebase committed and pushed to GitHub repository (`https://github.com/adwaitkamble/Fest-Connect.git`) with strictly preserved `.gitignore` exclusion for `.env`.
 - [x] PROJECT_MEMORY.md updated with verified final status.
 
 ## Blockers / decisions
