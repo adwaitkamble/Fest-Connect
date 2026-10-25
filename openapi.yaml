@@ -1,0 +1,2893 @@
+openapi: 3.0.3
+info:
+  title: FestConnect API
+  description: |
+    Centralized Technical Fest & Event Registration System API.
+    Developed for Object Oriented Modelling and System Design (BCER27PC02).
+  version: 0.1.0
+servers:
+  - url: http://localhost:4000
+    description: Local Development Server
+
+tags:
+  - name: Health
+    description: System liveness and dependency readiness probes
+  - name: Authentication
+    description: User registration, session management, and credential verification
+  - name: Events
+    description: Public technical fest event discovery and coordinator/admin event management
+  - name: Schedules
+    description: Event schedule entries, dates, venues, and timings
+  - name: Teams
+    description: Team creation, roster management, and membership controls
+  - name: Registrations
+    description: Event team registrations, validation, and lifecycle management
+  - name: Payments
+    description: Payment processing, mock gateway adapter simulation, and payment attempt tracking
+  - name: Passes
+    description: Digital entry passes, cryptographic QR code verification, and receipt retrieval
+
+paths:
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Liveness health check
+      description: Returns liveness status and basic runtime diagnostic metadata.
+      responses:
+        '200':
+          description: Service is alive and healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/ready:
+    get:
+      tags:
+        - Health
+      summary: Dependency readiness check
+      description: Verifies connectivity to authoritative MySQL persistence layer.
+      responses:
+        '200':
+          description: Database connected and ready to serve requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+        '503':
+          description: Database unreachable or initializing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadyResponse'
+
+  /api/v1/auth/csrf:
+    get:
+      tags:
+        - Authentication
+      summary: Obtain or initialize CSRF token
+      description: |
+        Generates or refreshes a cryptographically random CSRF token, sets the
+        readable `festconnect_csrf` cookie, and returns the token in the response payload.
+      responses:
+        '200':
+          description: CSRF token initialized
+          headers:
+            Set-Cookie:
+              description: Double-Submit CSRF cookie (festconnect_csrf)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrfToken:
+                    type: string
+                    example: a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90
+
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Public participant registration
+      description: |
+        Registers a new participant account. Self-registration is strictly restricted
+        to the PARTICIPANT role; client attempts to inject COORDINATOR or ADMIN roles
+        are rejected. Sets an HttpOnly session cookie on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Participant registered successfully
+          headers:
+            Set-Cookie:
+              description: HttpOnly JWT authentication cookie (festconnect_token)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Participant account registered successfully.
+                  user:
+                    $ref: '#/components/schemas/AuthenticatedUser'
+        '400':
+          description: Request body validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Participant with this email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: |
+        Authenticates a participant, coordinator, or admin using email and password.
+        Sets an HttpOnly JWT session cookie on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: HttpOnly JWT authentication cookie (festconnect_token)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Login successful.
+                  user:
+                    $ref: '#/components/schemas/AuthenticatedUser'
+        '400':
+          description: Validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Clears the HttpOnly authentication session cookie.
+      responses:
+        '200':
+          description: Logged out successfully
+          headers:
+            Set-Cookie:
+              description: Cleared cookie with expiration in the past
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully.
+
+  /api/v1/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current authenticated user profile
+      description: Returns the sanitized profile and verified role of the current session.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/AuthenticatedUser'
+        '401':
+          description: Unauthenticated or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/events:
+    get:
+      tags:
+        - Events
+      summary: Discover fest events
+      description: Returns a paginated list of technical fest events with category, status, and search filters.
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          description: Items per page
+        - in: query
+          name: event_type
+          schema:
+            type: string
+          description: Filter by event category
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [UPCOMING, ACTIVE, COMPLETED, CANCELLED]
+          description: Filter by event lifecycle status
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Search keywords in event name or description
+      responses:
+        '200':
+          description: Paginated events list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/EventListResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Events
+      summary: Create new fest event
+      description: Creates a new event. Authorized for ADMIN and COORDINATOR roles. Coordinators may only create events assigned to themselves.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          schema:
+            type: string
+          description: Required when authenticating via CookieAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '201':
+          description: Event created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/EventItem'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions or coordinator boundary violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/events/{id}:
+    get:
+      tags:
+        - Events
+      summary: Get event details
+      description: Returns complete event details including coordinator info and associated schedules.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Unique event identifier
+      responses:
+        '200':
+          description: Event details retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/EventDetail'
+        '400':
+          description: Invalid event ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags:
+        - Events
+      summary: Update fest event
+      description: Partially updates event fields. Authorized for ADMIN or the assigned COORDINATOR.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Unique event identifier
+        - in: header
+          name: X-CSRF-Token
+          schema:
+            type: string
+          description: Required when authenticating via CookieAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEventRequest'
+      responses:
+        '200':
+          description: Event updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/EventItem'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized coordinator or reassignment attempt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/events/{id}/schedules:
+    get:
+      tags:
+        - Schedules
+      summary: List event schedules
+      description: Returns all schedule entries and venue timings for the specified event.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Unique event identifier
+      responses:
+        '200':
+          description: Schedule list retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScheduleItem'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Schedules
+      summary: Add schedule entry to event
+      description: Adds a new schedule entry to an event. Authorized for ADMIN or assigned COORDINATOR.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Unique event identifier
+        - in: header
+          name: X-CSRF-Token
+          schema:
+            type: string
+          description: Required when authenticating via CookieAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleRequest'
+      responses:
+        '201':
+          description: Schedule entry created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ScheduleItem'
+        '400':
+          description: Validation error or contradictory timings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized coordinator
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/events/{id}/schedules/{scheduleId}:
+    patch:
+      tags:
+        - Schedules
+      summary: Update event schedule entry
+      description: Updates timing or venue of a schedule entry. Authorized for ADMIN or assigned COORDINATOR.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Unique event identifier
+        - in: path
+          name: scheduleId
+          required: true
+          schema:
+            type: integer
+          description: Unique schedule identifier
+        - in: header
+          name: X-CSRF-Token
+          schema:
+            type: string
+          description: Required when authenticating via CookieAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+      responses:
+        '200':
+          description: Schedule entry updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ScheduleItem'
+        '400':
+          description: Validation error or contradictory timings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized coordinator
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Event or schedule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/teams:
+    get:
+      tags:
+        - Teams
+      summary: List user teams
+      description: Returns all teams in which the authenticated user is either the leader or a member.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of teams retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamSummary'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Teams
+      summary: Create a new team
+      description: Creates a new team with the authenticated participant as the team leader.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: Team created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TeamDetail'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: CSRF verification failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Team name conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/teams/{id}:
+    get:
+      tags:
+        - Teams
+      summary: Get team details
+      description: Returns full team information including roster members and registrations. Access is restricted to team members, event coordinators, or administrators.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Team ID
+      responses:
+        '200':
+          description: Team details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TeamDetail'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - not a member of the team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Teams
+      summary: Disband team
+      description: Disbands the team and removes memberships. Restricted to team leader or administrators. Cannot disband if active registrations exist.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Team ID
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      responses:
+        '200':
+          description: Team disbanded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Team disbanded successfully
+        '400':
+          description: Team cannot be disbanded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - only team leader can disband
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/teams/{id}/members:
+    get:
+      tags:
+        - Teams
+      summary: List team members
+      description: Returns roster members of the specified team.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Team ID
+      responses:
+        '200':
+          description: Team members retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Teams
+      summary: Add member to team
+      description: Adds a participant to the team by participant ID or email address. Only the team leader can add members.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Team ID
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '201':
+          description: Member added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TeamMember'
+        '400':
+          description: Invalid request or team status prevents modifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - only team leader can add members
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Participant already a member of the team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/teams/{id}/members/{participantId}:
+    delete:
+      tags:
+        - Teams
+      summary: Remove member or leave team
+      description: Removes a member from the team. Can be invoked by the team leader (to remove a member) or by a member (to leave). The team leader cannot be removed.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Team ID
+        - in: path
+          name: participantId
+          required: true
+          schema:
+            type: integer
+          description: Participant ID to remove
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      responses:
+        '200':
+          description: Member removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Member removed from team successfully
+        '400':
+          description: Cannot remove leader or team status prevents modifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team or member not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/registrations:
+    get:
+      tags:
+        - Registrations
+      summary: List registrations
+      description: Retrieves registrations for teams the authenticated user belongs to, or all registrations for coordinators/admins.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: team_id
+          schema:
+            type: integer
+          description: Filter by team ID
+        - in: query
+          name: event_id
+          schema:
+            type: integer
+          description: Filter by event ID
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING_PAYMENT, CONFIRMED, CANCELLED]
+          description: Filter by registration status
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Registrations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RegistrationDetail'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      limit:
+                        type: integer
+                      total:
+                        type: integer
+                      totalPages:
+                        type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Registrations
+      summary: Register team for event
+      description: Registers an eligible team for a technical fest event. Enforces event status (ACTIVE/UPCOMING), team size bounds (min/max), duplicate registration prevention, and schedule conflict detection across all team members. Initial status is PENDING_PAYMENT.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRegistrationRequest'
+      responses:
+        '201':
+          description: Team registered successfully in PENDING_PAYMENT status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/RegistrationDetail'
+        '400':
+          description: Validation error, team size ineligible, event inactive, or schedule conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - only team leader can register
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Team or event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate registration for event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/registrations/{id}:
+    get:
+      tags:
+        - Registrations
+      summary: Get registration details
+      description: Returns details of a specific registration. Restricted to team members, event coordinators, or administrators.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+      responses:
+        '200':
+          description: Registration retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/RegistrationDetail'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    patch:
+      tags:
+        - Registrations
+      summary: Update registration status
+      description: Allows cancelling a registration. Team leaders and participants can cancel registrations.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRegistrationRequest'
+      responses:
+        '200':
+          description: Registration status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/RegistrationDetail'
+        '400':
+          description: Invalid transition or status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/registrations/{id}/payments:
+    get:
+      tags:
+        - Payments
+      summary: List payments for registration
+      description: Retrieves all payment attempts for a given registration. Restricted to team members of the registered team, coordinators, or administrators.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+      responses:
+        '200':
+          description: Payment attempts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentRecord'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized to view registration payments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Payments
+      summary: Initiate payment for registration
+      description: |
+        Initiates a payment attempt for a PENDING_PAYMENT registration using the configured PaymentGatewayAdapter (Factory Pattern).
+        Server computes payable amount from trusted event fee. If simulated outcome is SUCCESS, registration transitions to CONFIRMED.
+        Only the team leader of the registering team (or coordinator/admin) can initiate payment.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiatePaymentRequest'
+      responses:
+        '201':
+          description: Payment attempt recorded and processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Payment successful. Registration confirmed.
+                  data:
+                    $ref: '#/components/schemas/PaymentDetailResponse'
+        '400':
+          description: Registration not eligible (e.g. CANCELLED) or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - only team leader can pay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Registration already has a successful payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/payments:
+    post:
+      tags:
+        - Payments
+      summary: Initiate payment attempt
+      description: Initiates a payment attempt by supplying registration_id in body. Equivalent to POST /api/v1/registrations/{id}/payments.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiatePaymentRequest'
+      responses:
+        '201':
+          description: Payment attempt recorded and processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Payment successful. Registration confirmed.
+                  data:
+                    $ref: '#/components/schemas/PaymentDetailResponse'
+        '400':
+          description: Missing registration_id or invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Registration already has a successful payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/payments/{id}:
+    get:
+      tags:
+        - Payments
+      summary: Get payment details
+      description: Retrieves payment attempt details by payment ID. Restricted to team members of the registered team, coordinators, or administrators.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Payment ID
+      responses:
+        '200':
+          description: Payment details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PaymentRecord'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized to view payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/registrations/{id}/pass:
+    get:
+      tags:
+        - Passes
+      summary: Get digital pass for registration
+      description: Retrieves the issued digital pass, visual QR code data URL, and registration details. Registration must be CONFIRMED.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+      responses:
+        '200':
+          description: Digital pass details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PassDetailResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - participant does not belong to registered team
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Pass not found or registration not confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Passes
+      summary: Generate or retrieve digital pass
+      description: Transactionally generates a unique digital pass for a CONFIRMED registration with verified payment. Idempotent.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      responses:
+        '201':
+          description: Digital pass generated or retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Digital pass issued successfully
+                  data:
+                    $ref: '#/components/schemas/PassDetailResponse'
+        '400':
+          description: Registration not eligible for pass (unconfirmed or unverified payment)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/registrations/{id}/notifications/email:
+    get:
+      tags:
+        - Passes
+      summary: Get email notification delivery status
+      description: Retrieves email notification delivery status, timestamp, attempt count, and provider for an authorized user.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+      responses:
+        '200':
+          description: Email notification delivery status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/EmailNotificationStatus'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized to view notifications for this registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - Passes
+      summary: Send or retry confirmation and pass delivery email
+      description: Requests or retries email dispatch for an eligible confirmed registration with verified pass. Enforces duplicate-send cooldown.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Registration ID
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: Optional flag to bypass duplicate-send cooldown on retry
+                  example: false
+      responses:
+        '200':
+          description: Email notification dispatched or attempt recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Email notification dispatched successfully.
+                  data:
+                    $ref: '#/components/schemas/EmailNotificationStatus'
+        '400':
+          description: Ineligible registration (pending payment or cancelled)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Registration or pass not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate notification suppressed by rate limit/cooldown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/passes/{id}:
+    get:
+      tags:
+        - Passes
+      summary: Get pass by pass ID (Intentional Extra Endpoint)
+      description: Intentional extension providing direct pass record and roster retrieval by primary key pass_id for authorized team members, event coordinators, or administrators.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+          description: Pass Receipt ID
+      responses:
+        '200':
+          description: Pass retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/PassDetailResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Access denied to this pass
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Pass receipt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/passes/validate:
+    post:
+      tags:
+        - Passes
+      summary: Validate pass token or QR code
+      description: Server-side validation of pass token, QR code payload, or pass number. Rejects invalid or revoked passes.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPassRequest'
+      responses:
+        '200':
+          description: Pass is authentic, confirmed, and active
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/VerifyPassResponse'
+        '400':
+          description: Invalid, tampered, or revoked pass credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/passes/verify:
+    post:
+      tags:
+        - Passes
+      summary: Verify digital pass (Intentional Extra Endpoint — Alias for /validate)
+      description: Intentional gate check alias for /validate accepting pass_number or qr_code. Reconciles Sequence Diagram gate verification with Phase 07 requirements.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: x-csrf-token
+          required: true
+          schema:
+            type: string
+          description: CSRF double-submit token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPassRequest'
+      responses:
+        '200':
+          description: Pass is authentic, confirmed, and verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/VerifyPassResponse'
+        '400':
+          description: Invalid or unauthentic pass credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: festconnect_token
+      description: HttpOnly signed JWT session cookie
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Optional Bearer token header for API clients and automated tests
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - first_name
+        - last_name
+        - email
+        - password
+      properties:
+        first_name:
+          type: string
+          example: Adwait
+          maxLength: 100
+        last_name:
+          type: string
+          example: Sharma
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          example: adwait@festconnect.edu
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+          example: securePass123!
+        phone:
+          type: string
+          nullable: true
+          example: '+91 9876543210'
+        college_name:
+          type: string
+          nullable: true
+          example: Vellore Institute of Technology
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+          example: '2004-05-15'
+        skills:
+          type: array
+          items:
+            type: string
+          example: ['TypeScript', 'Express', 'MySQL']
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: adwait@festconnect.edu
+        password:
+          type: string
+          format: password
+          example: demo1234
+
+    AuthenticatedUser:
+      type: object
+      properties:
+        participant_id:
+          type: integer
+          example: 1
+        first_name:
+          type: string
+          example: Adwait
+        last_name:
+          type: string
+          example: Sharma
+        email:
+          type: string
+          format: email
+          example: adwait@festconnect.edu
+        phone:
+          type: string
+          nullable: true
+          example: '+91 9876543210'
+        college_name:
+          type: string
+          nullable: true
+          example: Vellore Institute of Technology
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+          example: '2004-05-15'
+        role:
+          type: string
+          enum: [PARTICIPANT, COORDINATOR, ADMIN]
+          example: PARTICIPANT
+        skills:
+          type: array
+          items:
+            type: string
+          example: ['TypeScript', 'Express', 'MySQL']
+        coordinator_id:
+          type: integer
+          nullable: true
+          example: null
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+          example: email
+        message:
+          type: string
+          example: Invalid email address format
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - details
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - AUTHENTICATION_FAILED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - UNPROCESSABLE_ENTITY
+                - INTERNAL_SERVER_ERROR
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: Request validation failed
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        liveness:
+          type: string
+          example: ok
+        readiness:
+          type: string
+          example: unconfigured
+        uptime:
+          type: number
+          example: 12.34
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+          example: festconnect-api
+        version:
+          type: string
+          example: 0.1.0
+        environment:
+          type: string
+          example: development
+        subsystems:
+          type: object
+          properties:
+            api:
+              type: string
+              example: healthy
+            database:
+              type: string
+              example: not_configured_in_phase_01
+            cache:
+              type: string
+              example: not_configured_in_phase_01
+
+    ReadyResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ready
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+          example: festconnect-api
+        dependencies:
+          type: object
+          properties:
+            database:
+              type: object
+              properties:
+                connected:
+                  type: boolean
+                  example: true
+
+    ScheduleItem:
+      type: object
+      required:
+        - schedule_id
+        - event_id
+        - event_date
+        - start_time
+        - end_time
+        - venue
+      properties:
+        schedule_id:
+          type: integer
+          example: 1
+        event_id:
+          type: integer
+          example: 1
+        event_date:
+          type: string
+          format: date
+          example: '2026-11-15'
+        start_time:
+          type: string
+          example: '09:00:00'
+        end_time:
+          type: string
+          example: '18:00:00'
+        venue:
+          type: string
+          example: 'Auditorium Hall B'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EventItem:
+      type: object
+      required:
+        - event_id
+        - event_name
+        - event_type
+        - min_team_size
+        - max_team_size
+        - registration_fee
+        - status
+      properties:
+        event_id:
+          type: integer
+          example: 1
+        coordinator_id:
+          type: integer
+          nullable: true
+          example: 1
+        coordinator_name:
+          type: string
+          nullable: true
+          example: 'Prof. Shalu Mahajan'
+        coordinator_email:
+          type: string
+          nullable: true
+          example: 'coordinator@festconnect.edu'
+        event_name:
+          type: string
+          example: 'CodeCraft 24h Hackathon'
+        event_type:
+          type: string
+          example: 'Coding / Software'
+        description:
+          type: string
+          nullable: true
+          example: 'Flagship university 24-hour hackathon.'
+        min_team_size:
+          type: integer
+          example: 2
+        max_team_size:
+          type: integer
+          example: 4
+        registration_fee:
+          type: string
+          example: '400.00'
+        status:
+          type: string
+          enum: [UPCOMING, ACTIVE, COMPLETED, CANCELLED]
+          example: 'UPCOMING'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EventDetail:
+      allOf:
+        - $ref: '#/components/schemas/EventItem'
+        - type: object
+          properties:
+            schedules:
+              type: array
+              items:
+                $ref: '#/components/schemas/ScheduleItem'
+
+    PaginationMeta:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 3
+        totalPages:
+          type: integer
+          example: 1
+
+    EventListResponse:
+      type: object
+      required:
+        - events
+        - pagination
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    CreateEventRequest:
+      type: object
+      required:
+        - event_name
+        - event_type
+      properties:
+        event_name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          example: 'AlgoSprint Rapid Problem Solving'
+        event_type:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: 'Competitive Programming'
+        description:
+          type: string
+          nullable: true
+          example: 'Algorithmic contest on graph theory and dynamic programming.'
+        min_team_size:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 1
+        max_team_size:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 1
+        registration_fee:
+          type: number
+          minimum: 0
+          default: 0
+          example: 100
+        status:
+          type: string
+          enum: [UPCOMING, ACTIVE, COMPLETED, CANCELLED]
+          default: 'UPCOMING'
+        coordinator_id:
+          type: integer
+          nullable: true
+          description: Assigned coordinator ID (Admin only; auto-assigned for Coordinators)
+
+    UpdateEventRequest:
+      type: object
+      properties:
+        event_name:
+          type: string
+          minLength: 2
+          maxLength: 255
+        event_type:
+          type: string
+          minLength: 2
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+        min_team_size:
+          type: integer
+          minimum: 1
+        max_team_size:
+          type: integer
+          minimum: 1
+        registration_fee:
+          type: number
+          minimum: 0
+        status:
+          type: string
+          enum: [UPCOMING, ACTIVE, COMPLETED, CANCELLED]
+        coordinator_id:
+          type: integer
+          nullable: true
+
+    CreateScheduleRequest:
+      type: object
+      required:
+        - event_date
+        - start_time
+        - end_time
+        - venue
+      properties:
+        event_date:
+          type: string
+          format: date
+          example: '2026-11-20'
+        start_time:
+          type: string
+          example: '10:00:00'
+        end_time:
+          type: string
+          example: '14:00:00'
+        venue:
+          type: string
+          example: 'Robotics Center Lab 4'
+
+    UpdateScheduleRequest:
+      type: object
+      properties:
+        event_date:
+          type: string
+          format: date
+        start_time:
+          type: string
+        end_time:
+          type: string
+        venue:
+          type: string
+
+    TeamSummary:
+      type: object
+      required:
+        - team_id
+        - team_name
+        - leader_id
+        - leader_name
+        - leader_email
+        - status
+        - member_count
+        - created_at
+        - updated_at
+      properties:
+        team_id:
+          type: integer
+          example: 1
+        team_name:
+          type: string
+          example: "ByteForce Alpha"
+        leader_id:
+          type: integer
+          example: 2
+        leader_name:
+          type: string
+          example: "Alice Chen"
+        leader_email:
+          type: string
+          format: email
+          example: "alice@festconnect.edu"
+        status:
+          type: string
+          enum: [FORMING, READY, REGISTERED, DISBANDED]
+          example: "FORMING"
+        member_count:
+          type: integer
+          example: 3
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TeamMember:
+      type: object
+      required:
+        - team_member_id
+        - participant_id
+        - first_name
+        - last_name
+        - email
+        - role
+        - joined_at
+      properties:
+        team_member_id:
+          type: integer
+          example: 10
+        participant_id:
+          type: integer
+          example: 2
+        first_name:
+          type: string
+          example: "Alice"
+        last_name:
+          type: string
+          example: "Chen"
+        email:
+          type: string
+          format: email
+          example: "alice@festconnect.edu"
+        phone:
+          type: string
+          nullable: true
+          example: "+91 9876543210"
+        college_name:
+          type: string
+          nullable: true
+          example: "Tech University"
+        role:
+          type: string
+          enum: [LEADER, MEMBER]
+          example: "LEADER"
+        joined_at:
+          type: string
+          format: date-time
+
+    TeamDetail:
+      type: object
+      required:
+        - team_id
+        - team_name
+        - leader_id
+        - leader_name
+        - leader_email
+        - status
+        - member_count
+        - members
+        - created_at
+        - updated_at
+      properties:
+        team_id:
+          type: integer
+          example: 1
+        team_name:
+          type: string
+          example: "ByteForce Alpha"
+        leader_id:
+          type: integer
+          example: 2
+        leader_name:
+          type: string
+          example: "Alice Chen"
+        leader_email:
+          type: string
+          format: email
+          example: "alice@festconnect.edu"
+        status:
+          type: string
+          enum: [FORMING, READY, REGISTERED, DISBANDED]
+          example: "FORMING"
+        member_count:
+          type: integer
+          example: 3
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamMember'
+        registrations:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrationSummary'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateTeamRequest:
+      type: object
+      required:
+        - team_name
+      properties:
+        team_name:
+          type: string
+          minLength: 2
+          maxLength: 150
+          example: "ByteForce Alpha"
+
+    AddMemberRequest:
+      type: object
+      properties:
+        participant_id:
+          type: integer
+          minimum: 1
+          example: 5
+        email:
+          type: string
+          format: email
+          example: "bob@festconnect.edu"
+
+    CreateRegistrationRequest:
+      type: object
+      required:
+        - team_id
+        - event_id
+      properties:
+        team_id:
+          type: integer
+          minimum: 1
+          example: 1
+        event_id:
+          type: integer
+          minimum: 1
+          example: 10
+
+    UpdateRegistrationRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [CANCELLED]
+          example: "CANCELLED"
+
+    RegistrationSummary:
+      type: object
+      required:
+        - registration_id
+        - event_id
+        - event_name
+        - event_type
+        - registration_fee
+        - status
+        - registration_date
+      properties:
+        registration_id:
+          type: integer
+          example: 1
+        event_id:
+          type: integer
+          example: 2
+        event_name:
+          type: string
+          example: "Autonomous Robotics Challenge"
+        event_type:
+          type: string
+          example: "ROBOTICS"
+        registration_fee:
+          type: string
+          example: "250.00"
+        status:
+          type: string
+          enum: [PENDING_PAYMENT, CONFIRMED, CANCELLED]
+          example: "PENDING_PAYMENT"
+        registration_date:
+          type: string
+          format: date-time
+
+    RegistrationDetail:
+      type: object
+      required:
+        - registration_id
+        - team_id
+        - team_name
+        - leader_id
+        - leader_name
+        - event_id
+        - event_name
+        - event_type
+        - registration_fee
+        - status
+        - registration_date
+        - created_at
+        - updated_at
+      properties:
+        registration_id:
+          type: integer
+          example: 1
+        team_id:
+          type: integer
+          example: 1
+        team_name:
+          type: string
+          example: "ByteForce Alpha"
+        leader_id:
+          type: integer
+          example: 2
+        leader_name:
+          type: string
+          example: "Alice Chen"
+        event_id:
+          type: integer
+          example: 2
+        event_name:
+          type: string
+          example: "Autonomous Robotics Challenge"
+        event_type:
+          type: string
+          example: "ROBOTICS"
+        registration_fee:
+          type: string
+          example: "250.00"
+        status:
+          type: string
+          enum: [PENDING_PAYMENT, CONFIRMED, CANCELLED]
+          example: "PENDING_PAYMENT"
+        registration_date:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    InitiatePaymentRequest:
+      type: object
+      properties:
+        registration_id:
+          type: integer
+          example: 1
+          description: Registration ID (required when POSTing to /api/v1/payments)
+        payment_method:
+          type: string
+          enum: [UPI, NET_BANKING, CREDIT_CARD, DEBIT_CARD]
+          default: UPI
+          example: UPI
+        simulated_outcome:
+          type: string
+          enum: [SUCCESS, FAILED, PENDING]
+          description: Demo/mock-only outcome simulation. Disallowed in production.
+          example: SUCCESS
+
+    PaymentRecord:
+      type: object
+      required:
+        - payment_id
+        - registration_id
+        - amount
+        - payment_date
+        - payment_status
+        - payment_method
+        - attempt_number
+        - created_at
+        - updated_at
+      properties:
+        payment_id:
+          type: integer
+          example: 1
+        registration_id:
+          type: integer
+          example: 1
+        amount:
+          type: number
+          format: float
+          example: 250.00
+        payment_date:
+          type: string
+          format: date-time
+        payment_status:
+          type: string
+          enum: [PENDING, SUCCESS, FAILED]
+          example: SUCCESS
+        transaction_id:
+          type: string
+          nullable: true
+          example: MOCK-SUCC-1729699200000-4821
+        payment_method:
+          type: string
+          enum: [UPI, NET_BANKING, CREDIT_CARD, DEBIT_CARD]
+          example: UPI
+        attempt_number:
+          type: integer
+          example: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    PaymentDetailResponse:
+      type: object
+      required:
+        - payment
+        - registration
+      properties:
+        payment:
+          $ref: '#/components/schemas/PaymentRecord'
+        registration:
+          $ref: '#/components/schemas/RegistrationDetail'
+
+    PassReceiptRecord:
+      type: object
+      required:
+        - pass_id
+        - registration_id
+        - payment_id
+        - pass_number
+        - qr_code
+        - issued_at
+      properties:
+        pass_id:
+          type: integer
+          example: 1
+        registration_id:
+          type: integer
+          example: 1
+        payment_id:
+          type: integer
+          example: 2
+        pass_number:
+          type: string
+          example: FEST-2026-CC1-001
+        qr_code:
+          type: string
+          example: FESTCONNECT::PASS::REG1::EVENT1::TEAM1::PAY2::SIG789ABC
+        issued_at:
+          type: string
+          format: date-time
+
+    PassDetailResponse:
+      type: object
+      required:
+        - pass
+        - registration
+        - payment
+        - members
+        - schedules
+        - qr_data_url
+      properties:
+        pass:
+          $ref: '#/components/schemas/PassReceiptRecord'
+        registration:
+          type: object
+          properties:
+            registration_id:
+              type: integer
+            team_id:
+              type: integer
+            team_name:
+              type: string
+            leader_id:
+              type: integer
+            event_id:
+              type: integer
+            event_name:
+              type: string
+            event_type:
+              type: string
+            registration_fee:
+              type: string
+            registration_date:
+              type: string
+            status:
+              type: string
+        payment:
+          type: object
+          properties:
+            payment_id:
+              type: integer
+            amount:
+              type: string
+            payment_status:
+              type: string
+            payment_method:
+              type: string
+            transaction_id:
+              type: string
+            payment_date:
+              type: string
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              participant_id:
+                type: integer
+              first_name:
+                type: string
+              last_name:
+                type: string
+              email:
+                type: string
+              role:
+                type: string
+        schedules:
+          type: array
+          items:
+            type: object
+            properties:
+              schedule_id:
+                type: integer
+              event_date:
+                type: string
+              start_time:
+                type: string
+              end_time:
+                type: string
+              venue:
+                type: string
+        qr_data_url:
+          type: string
+          example: data:image/png;base64,iVBORw0KGgoAAAANSUh...
+
+    VerifyPassRequest:
+      type: object
+      properties:
+        pass_number:
+          type: string
+          example: FEST-2026-CC1-001
+        qr_code:
+          type: string
+          example: FESTCONNECT::PASS::REG1::EVENT1::TEAM1::PAY2::SIG789ABC
+
+    VerifyPassResponse:
+      type: object
+      required:
+        - valid
+        - verified_at
+      properties:
+        valid:
+          type: boolean
+          example: true
+        pass:
+          $ref: '#/components/schemas/PassReceiptRecord'
+        event:
+          type: object
+        team:
+          type: object
+        members:
+          type: array
+          items:
+            type: object
+        payment:
+          type: object
+        verified_at:
+          type: string
+          format: date-time
+        message:
+          type: string
+
+    EmailNotificationStatus:
+      type: object
+      required:
+        - registration_id
+        - status
+        - recipient
+        - attempts
+        - provider
+        - preview_available
+        - message
+      properties:
+        registration_id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [DELIVERED, FAILED, NOT_SENT]
+          example: DELIVERED
+        recipient:
+          type: string
+          example: adwait@festconnect.edu
+        recipient_name:
+          type: string
+          example: Adwait Kamble
+        attempts:
+          type: integer
+          example: 1
+        last_sent_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_attempted_at:
+          type: string
+          format: date-time
+          nullable: true
+        provider:
+          type: string
+          example: console
+        preview_available:
+          type: boolean
+          example: true
+        message_id:
+          type: string
+          example: console-msg-1729785600000-a1b2c3
+        error:
+          type: string
+          nullable: true
+        message:
+          type: string
+          example: Email preview generated in server logs.
+
+
+
+
+

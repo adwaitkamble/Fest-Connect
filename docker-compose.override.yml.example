@@ -1,0 +1,17 @@
+# =====================================================================
+# FestConnect — Optional Developer Override (docker-compose.override.yml)
+# Copy this file to `docker-compose.override.yml` for local host inspection
+# =====================================================================
+
+services:
+  mysql:
+    ports:
+      - "3306:3306"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    ports:
+      - "4000:4000"

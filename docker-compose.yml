@@ -1,0 +1,136 @@
+# =====================================================================
+# FestConnect — Production / Academic Demonstration Docker Compose
+# Architecture: Layered Modular Monolith (Web, API, MySQL 8, Redis 7)
+# =====================================================================
+
+services:
+  # -------------------------------------------------------------------
+  # 1. Authoritative Relational Database (MySQL 8.0)
+  # -------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: festconnect-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-festconnect_root_secret_change_me}
+      MYSQL_DATABASE: ${DB_NAME:-festconnect}
+      MYSQL_USER: ${DB_USER:-fest_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fest_password_local_only}
+    volumes:
+      - festconnect_mysql_data:/var/lib/mysql
+    networks:
+      - festconnect-data-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  # -------------------------------------------------------------------
+  # 2. Ephemeral In-Memory Cache (Redis 7.0)
+  # Optional performance layer — system gracefully falls back to MySQL
+  # -------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: festconnect-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - festconnect_redis_data:/data
+    networks:
+      - festconnect-data-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # -------------------------------------------------------------------
+  # 3. Layered Application Server (Express + Node.js 22 LTS API)
+  # -------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: festconnect-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-fest_user}
+      DB_PASSWORD: ${DB_PASSWORD:-fest_password_local_only}
+      DB_NAME: ${DB_NAME:-festconnect}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-festconnect_default_secret_minimum_32_characters_for_security}
+      PASS_HMAC_SECRET: ${PASS_HMAC_SECRET:-festconnect_default_pass_hmac_secret_minimum_32_characters_long}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      CACHE_DEFAULT_TTL_SECONDS: ${CACHE_DEFAULT_TTL_SECONDS:-60}
+      RUN_SEEDS: ${RUN_SEEDS:-true}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - festconnect-backend-net
+      - festconnect-data-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # -------------------------------------------------------------------
+  # 4. Frontend & Reverse Proxy (React SPA + Nginx Alpine)
+  # -------------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: festconnect-web
+    restart: unless-stopped
+    ports:
+      - "${PORT_WEB:-80}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - festconnect-frontend-net
+      - festconnect-backend-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+# ---------------------------------------------------------------------
+# Network Isolation Topology
+# ---------------------------------------------------------------------
+networks:
+  festconnect-frontend-net:
+    driver: bridge
+  festconnect-backend-net:
+    driver: bridge
+  festconnect-data-net:
+    driver: bridge
+    internal: true # Isolates database and cache from external access
+
+# ---------------------------------------------------------------------
+# Named Persistent Storage Volumes
+# ---------------------------------------------------------------------
+volumes:
+  festconnect_mysql_data:
+    driver: local
+  festconnect_redis_data:
+    driver: local
