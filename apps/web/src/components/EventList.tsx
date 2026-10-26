@@ -176,6 +176,7 @@ export const EventList: React.FC<EventListProps> = ({ currentUser, onSelectEvent
       {/* Header and Action Bar */}
       <div className="discovery-header">
         <div>
+          <span className="discovery-tag">⚡ University TechFest 2026</span>
           <h2 className="discovery-title">Fest Technical Events & Competitions</h2>
           <p className="discovery-subtitle">
             Explore university hackathons, robotics challenges, and coding contests.
@@ -191,14 +192,31 @@ export const EventList: React.FC<EventListProps> = ({ currentUser, onSelectEvent
       {/* Filter and Search Bar */}
       <div className="discovery-filters-bar">
         <form className="search-form" onSubmit={handleSearchSubmit}>
-          <input
-            type="text"
-            className="search-input"
-            placeholder="Search by event name or keyword..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button type="submit" className="btn btn-secondary btn-sm">
+          <div className="search-input-wrapper">
+            <span className="search-icon" aria-hidden="true">🔍</span>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search by event name or keyword..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Search events"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                title="Clear input"
+                onClick={() => {
+                  setSearchTerm('');
+                  setActiveSearch('');
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <button type="submit" className="btn btn-primary btn-sm search-submit-btn">
             Search
           </button>
           {activeSearch && (
@@ -248,6 +266,30 @@ export const EventList: React.FC<EventListProps> = ({ currentUser, onSelectEvent
             </select>
           </div>
         </div>
+      </div>
+
+      {/* Live Active Filter Bar & Results Count */}
+      <div className="discovery-status-bar">
+        <span className="results-count">
+          Showing <strong>{events.length}</strong> of <strong>{pagination.total}</strong> events
+          {category !== 'All' && ` • Category: ${category}`}
+          {status !== 'All' && ` • Status: ${status}`}
+          {activeSearch && ` • Search: "${activeSearch}"`}
+        </span>
+        {(category !== 'All' || status !== 'All' || activeSearch) && (
+          <button
+            type="button"
+            className="btn btn-outline btn-xs"
+            onClick={() => {
+              setCategory('All');
+              setStatus('All');
+              setSearchTerm('');
+              setActiveSearch('');
+            }}
+          >
+            Reset Filters
+          </button>
+        )}
       </div>
 
       {/* Main Events View */}
