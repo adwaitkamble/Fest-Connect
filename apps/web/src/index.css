@@ -1,46 +1,193 @@
+/* =====================================================================
+   FestConnect Design System Tokens & Base Styles (UI/UX v2)
+   Conforms to DESIGN.md Section 8 (Festival Violet & Warm Coral)
+   ===================================================================== */
+
 :root {
-  --color-primary: #059669;
-  --color-primary-hover: #047857;
-  --color-primary-light: #ecfdf5;
-  --color-accent: #0284c7;
-  --color-text-main: #0f172a;
-  --color-text-muted: #64748b;
-  --color-bg-main: #f8fafc;
-  --color-bg-card: #ffffff;
-  --color-border: #e2e8f0;
-  --color-warning: #d97706;
-  --color-warning-light: #fef3c7;
-  --color-danger: #dc2626;
-  --color-danger-light: #fee2e2;
-  --color-success: #16a34a;
-  --color-success-light: #dcfce7;
-  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Brand Palette */
+  --fc-ink: #111827;
+  --fc-ink-soft: #374151;
+  --fc-ink-muted: #64748b;
+  --fc-primary: #6D28D9; /* Vivid Festival Violet */
+  --fc-primary-hover: #5B21B6;
+  --fc-primary-light: #F5F3FF;
+  --fc-primary-border: #DDD6FE;
+  --fc-coral: #F97360; /* Warm Coral Highlight */
+  --fc-coral-hover: #E05642;
+  --fc-coral-light: #FFF1F0;
+  --fc-sky: #38BDF8;
+  --fc-sky-light: #F0F9FF;
+  --fc-mint: #10B981;
+
+  /* Surfaces & Backgrounds */
+  --fc-page: #F8FAFC;
+  --fc-surface: #FFFFFF;
+  --fc-surface-muted: #F1F5F9;
+  --fc-surface-hover: #F8FAFC;
+  --fc-border: #E2E8F0;
+  --fc-border-subtle: #F1F5F9;
+  --fc-border-hover: #CBD5E1;
+
+  /* Semantic Feedback (Text / Background / Border) */
+  --fc-success: #047857;
+  --fc-success-bg: #D1FAE5;
+  --fc-success-border: #A7F3D0;
+
+  --fc-warning: #B45309;
+  --fc-warning-bg: #FEF3C7;
+  --fc-warning-border: #FDE68A;
+
+  --fc-danger: #B91C1C;
+  --fc-danger-bg: #FEE2E2;
+  --fc-danger-border: #FECACA;
+
+  --fc-info: #1D4ED8;
+  --fc-info-bg: #DBEAFE;
+  --fc-info-border: #BFDBFE;
+
+  /* Focus Indicator */
+  --fc-focus: #2563EB;
+
+  /* Typography */
+  --fc-font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fc-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Shadows (Elevations) */
+  --fc-shadow-xs: 0 1px 2px 0 rgba(17, 24, 39, 0.05);
+  --fc-shadow-sm: 0 1px 3px 0 rgba(17, 24, 39, 0.08), 0 1px 2px -1px rgba(17, 24, 39, 0.08);
+  --fc-shadow-md: 0 4px 6px -1px rgba(17, 24, 39, 0.08), 0 2px 4px -2px rgba(17, 24, 39, 0.06);
+  --fc-shadow-lg: 0 10px 15px -3px rgba(17, 24, 39, 0.08), 0 4px 6px -4px rgba(17, 24, 39, 0.04);
+  --fc-shadow-xl: 0 20px 25px -5px rgba(17, 24, 39, 0.1), 0 8px 10px -6px rgba(17, 24, 39, 0.04);
+
+  /* Radii */
+  --fc-radius-sm: 6px;
+  --fc-radius-md: 8px; /* Standard controls */
+  --fc-radius-lg: 12px; /* Cards */
+  --fc-radius-xl: 16px; /* Modals, large panels */
+  --fc-radius-pill: 9999px;
+
+  /* Backward Compatibility Aliases */
+  --color-primary: var(--fc-primary);
+  --color-primary-hover: var(--fc-primary-hover);
+  --color-primary-light: var(--fc-primary-light);
+  --color-accent: var(--fc-coral);
+  --color-text-main: var(--fc-ink);
+  --color-text-muted: var(--fc-ink-muted);
+  --color-bg-main: var(--fc-page);
+  --color-bg-card: var(--fc-surface);
+  --color-border: var(--fc-border);
+  --color-warning: var(--fc-warning);
+  --color-warning-light: var(--fc-warning-bg);
+  --color-danger: var(--fc-danger);
+  --color-danger-light: var(--fc-danger-bg);
+  --color-success: var(--fc-success);
+  --color-success-light: var(--fc-success-bg);
+  --font-family-base: var(--fc-font-sans);
+  --shadow-sm: var(--fc-shadow-sm);
+  --shadow-md: var(--fc-shadow-md);
+  --radius-md: var(--fc-radius-md);
+  --radius-lg: var(--fc-radius-lg);
 }
 
-* {
+/* Base Reset */
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-body {
-  font-family: var(--font-family-base);
-  background-color: var(--color-bg-main);
-  color: var(--color-text-main);
-  line-height: 1.5;
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
 }
 
+body {
+  font-family: var(--fc-font-sans);
+  background-color: var(--fc-page);
+  color: var(--fc-ink);
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Visible Focus Treatment */
+:focus-visible {
+  outline: 3px solid var(--fc-focus);
+  outline-offset: 2px;
+}
+
+/* Links */
 a {
-  color: var(--color-primary);
+  color: var(--fc-primary);
   text-decoration: none;
+  transition: color 0.15s ease;
 }
 
 a:hover {
-  text-decoration: underline;
+  color: var(--fc-primary-hover);
+}
+
+/* Skip link for Accessibility */
+.skip-link {
+  position: absolute;
+  top: -999px;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.75rem 1.25rem;
+  background: var(--fc-ink);
+  color: #ffffff;
+  border-radius: var(--fc-radius-md);
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: var(--fc-shadow-lg);
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--fc-ink);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.95); }
+}
+
+/* Reduced Motion Mode */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

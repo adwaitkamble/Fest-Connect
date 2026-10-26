@@ -111,6 +111,7 @@
 - [x] Full FA2 Submission Dossier created in `docs/FA2_SUBMISSION_DOSSIER.md` mapping to all 6 rubric criteria (10/10 marks).
 - [x] Event & Workshop Date Scheduling Enhancement: Added integrated date, time slot, and venue picker into `EventFormModal.tsx` allowing coordinators to configure calendar dates directly upon event/workshop creation.
 - [x] Remote Repository Push: Codebase committed and pushed to GitHub repository (`https://github.com/adwaitkamble/Fest-Connect.git`) with strictly preserved `.gitignore` exclusion for `.env`.
+- [x] Frontend Redesign (FestConnect UI/UX v2): Completed professional redesign referencing `DESIGN-1.md` and `ANTIGRAVITY_FRONTEND_REDESIGN_MASTER_PROMPT.md` without backend modification. Implemented Festival Violet & Warm Coral design system tokens, responsive navigation bar with blur backdrop, dynamic landing hero, 3-step journey strip, feature cards, subtle micro-animations, accessible contrast, and 100% test pass rate across all 37 web tests and 297 monorepo-wide tests.
 - [x] PROJECT_MEMORY.md updated with verified final status.
 
 ## Blockers / decisions

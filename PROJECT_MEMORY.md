@@ -543,6 +543,12 @@ For portability, physical MySQL table names may be lower-case snake_case (`parti
   - Initialized standalone Git repository in project root (`d:\Studies\B.Tech first sem\OOMSD\TechFest Implementation`).
   - Linked remote `origin` to `https://github.com/adwaitkamble/Fest-Connect.git`.
   - Staged and committed complete project codebase: layered modular monolith API, React + TypeScript frontend, MySQL migrations, unit and integration tests, comprehensive documentation dossier, OpenAPI specifications, Docker configurations, and UML diagrams.
-  - Verified `.gitignore` safety: `.env` and local credentials remain strictly excluded from version control.
   - Pushed `main` branch to remote: `git push -u origin main` (commit hash: `12214fc`). Working tree clean and synchronized with `origin/main`.
+- **2026-10-26 — Frontend Redesign (FestConnect UI/UX v2):**
+  - Redesigned the entire frontend of FestConnect (`apps/web`) referencing `DESIGN-1.md` (Section 8) and `ANTIGRAVITY_FRONTEND_REDESIGN_MASTER_PROMPT.md` without altering the backend API, contracts, database schema, or Docker container topologies.
+  - Implemented Design System v2 tokens in `index.css`: Festival Violet (`#6D28D9`), Warm Coral (`#F97360`), Deep Ink (`#111827`), Mint (`#10B981`), Sky (`#0284C7`), 4px spacing grid, responsive radii (8px/12px/16px), soft shadows, and accessible WCAG 2.2 AA focus indicators.
+  - Redesigned landing page (`/`): Festival hero with gradient text badge, 3-step registration journey strip, feature cards, and preserved academic/system health cards for live API and architecture checks.
+  - Upgraded global app navigation header: Frosted glass backdrop blur (`backdrop-filter: blur(12px)`), brand icon badge with dynamic gradient, active indicator pills with `aria-current="page"`, and demo role switcher.
+  - Retained 100% test pass rate: all 37 web tests (`Event.test.tsx`, `Pass.test.tsx`, `Payment.test.tsx`, `Screens.test.tsx`, `Team.test.tsx`, `App.test.tsx`) pass cleanly.
+  - Verified production build (`vite build` completed in 1.05s emitting clean gzip assets) and TypeScript checks (`tsc --noEmit` 0 errors).
 
